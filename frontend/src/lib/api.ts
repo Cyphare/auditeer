@@ -11,7 +11,8 @@ import type {
 } from "./types";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  (typeof window !== "undefined" ? "" : "http://127.0.0.1:8000");
 
 export async function fetchHealth(): Promise<{
   status: string;
