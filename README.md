@@ -1,77 +1,80 @@
 # Auditeer — Intelligent Knowledge & Operations Copilot
 
-> An open-architecture intelligence platform bridging unstructured internal documents, real-time Lakehouse SQL telemetry, zero-trust role-based access control (RBAC), and regulatory privacy compliance.
+> A governance-first AI workspace uniting internal knowledge retrieval, read-only operational SQL analytics, zero-trust Role-Based Access Control (RBAC), and automated UU PDP PII redaction.
+
+**Live Demo:** [https://auditeer.vercel.app](https://auditeer.vercel.app)
 
 ---
 
 ## Why Auditeer Exists
 
-Standard chatbots and basic RAG setups fail inside mission-critical organizations for four key reasons:
-1. **Unstructured + Structured Data Silos:** Operational decisions require **both** internal standard operating procedures (SOPs) *and* live telemetry from data platforms (e.g. cluster health, telecommunication metrics, risk alerts).
-2. **Data Leakage Across Roles:** A Junior Analyst must never receive confidential executive margins or restricted compliance records, even when asking the same assistant.
-3. **Data Privacy Compliance (UU PDP No. 27/2022 & POJK 11/2022):** Sensitive personally identifiable information (`NIK` 16-digit national ID, `NPWP`, phone numbers, payment cards, emails) must be masked **before** reaching any model context or audit log.
-4. **Vendor Independence & Hallucination Prevention:** Organizations require flexible inference across **local on-premise models (`Ollama` / `vLLM`)** and cloud endpoints, backed by measurable automated benchmarks.
+Standard chatbots and naive RAG demos break down in regulated environments for four reasons:
+1. **Unstructured + Structured Silos:** Operational teams need answers grounded in **both** internal SOP documents *and* live operational data (cluster telemetry, telecom CDR quality metrics, fraud alerts, and SLA contracts).
+2. **Role-Based Data Leakage:** A Junior Analyst must never receive confidential executive margins or restricted engineering SOPs, even when querying the same assistant.
+3. **Privacy Compliance (UU PDP No. 27/2022):** Sensitive identifiers (`NIK` 16-digit IDs, phone numbers, emails, payment cards, `NPWP`) must be automatically masked **before** entering any model prompt or audit log.
+4. **Resilience & Cost Control:** Teams need both an instant zero-key local grounded mode and optional connectors for private on-premise models (`Ollama`) or cloud providers (`Gemini` / `OpenAI`).
 
-**Auditeer** solves all four challenges through an inspectable microservice architecture (`Python FastAPI` + `Next.js TypeScript`).
+---
+
+## Core Workspace Tabs
+
+| Tab | What It Does |
+| :--- | :--- |
+| **Assistant** | Bilingual (Indonesian & English) Q&A combining document citations, read-only SQL tables, incident ticket dispatch, and an inspectable step-by-step execution trace. |
+| **Documents** | Role-filtered Knowledge Vault with full-section document reader, live document ingestion, and Hybrid RAG search testing. |
+| **Data** | Operational Lakehouse explorer (`cluster_telemetry`, `telecom_cdr_metrics`, `banking_risk_alerts`, `executive_contracts`, `incident_tickets`, `audit_logs`) with a read-only `SELECT` SQL playground. |
+| **Benchmark** | 10 automated golden test cases displaying each tested `Query`, the assistant's plain-text `Answer`, expected verification rule, and pass/latency status. |
 
 ---
 
 ## Architecture Overview
 
+Auditeer supports **two synchronized runtimes**:
+- **Standalone Serverless Mode (Default on Vercel):** Built-in Next.js 15 App Router API routes (`frontend/src/app/api/*`) backed by TypeScript server modules (`frontend/src/lib/server/*`) run end-to-end without requiring a separate backend server.
+- **Full Python FastAPI Mode:** Dedicated FastAPI backend (`backend/app/*`) featuring an in-memory SQLite Lakehouse, full Okapi BM25 + semantic cosine + RRF hybrid indexing, and a multi-provider LLM gateway (`auditeer-grounded-v1`, Ollama, Google Gemini, OpenAI/vLLM). Set `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000` in the frontend to route browser requests to FastAPI.
+
 ```mermaid
 flowchart LR
-    User["Enterprise User<br/>(RBAC Persona)"] --> UI["Auditeer Web Console"]
-    UI -->|POST /api/chat| PII["1. PII Redaction Guardrail<br/>(UU PDP: NIK / NPWP / Card / Phone)"]
-    PII --> Router["2. Agentic Router &<br/>Pre-LLM RBAC Gate"]
+    User["User + Active Role"] --> UI["Next.js Web Console<br/>(Assistant · Documents · Data · Benchmark)"]
+    UI -->|POST /api/chat| PII["1. PII Scanner<br/>(UU PDP: NIK / Phone / Email / Card / NPWP)"]
+    PII --> RBAC["2. Pre-LLM RBAC Gate<br/>(Role Clearance & Table Policy)"]
 
-    Router --> RAG["3a. Bilingual Hybrid RAG<br/>(BM25 + Subword Cosine + RRF)"]
-    Router --> SQL["3b. Sandboxed Lakehouse SQL<br/>(Read-Only AST + Table RBAC)"]
-    Router --> Act["3c. Workflow Action Tool<br/>(Automated Incident Dispatch)"]
+    RBAC --> RAG["3a. Bilingual Hybrid RAG<br/>(BM25 + Semantic Vector + RRF)"]
+    RBAC --> SQL["3b. Read-Only Safe SQL<br/>(SELECT-Only Operational Tables)"]
+    RBAC --> Act["3c. Ticket Dispatcher<br/>(Auto P1 Incident Creation)"]
 
-    RAG --> Vault[("Knowledge Vault<br/>Markdown SOPs + Live Ingestion")]
-    SQL --> Mart[("Operational Data Mart<br/>Cluster, Telecom, Risk Tables")]
-    Act --> Mart
-
-    RAG & SQL & Act --> Gateway["4. Multi-LLM Gateway<br/>(Local Engine | Ollama | Gemini | vLLM)"]
-    Gateway --> Audit[("Immutable Audit Trail<br/>audit_logs")]
-    Gateway --> UI
+    RAG & SQL & Act --> Synth["4. Grounded Answer Engine & LLM Gateway<br/>(auditeer-grounded-v1 | Ollama | Gemini | OpenAI)"]
+    Synth --> UI
 ```
-
----
-
-## Core Engineering Pillars
-
-| Engineering Pillar | Implementation Details |
-| :--- | :--- |
-| **1. Natural Language Processing (NLP)** | Bilingual (Bahasa Indonesia + English) tokenizer, light suffix normalization, domain concept expansion, section-level contextual Markdown chunking, **Sparse BM25 Okapi** + **Subword TF-IDF Cosine Vector** search fused via **Reciprocal Rank Fusion (RRF)**. |
-| **2. LLM Orchestration & Resilience** | Multi-provider runtime supporting local air-gapped **Ollama (`qwen2.5`, `llama3.2`)**, **Google Gemini**, **OpenAI / vLLM**, plus a deterministic **Local Grounded Engine** with automatic failover and hallucination guardrails. |
-| **3. Structured Data & Governance** | Sandboxed read-only **NL-to-SQL engine** over operational tables (`cluster_telemetry`, `telecom_cdr_metrics`, `banking_risk_alerts`, `executive_contracts`), **Automated Incident Ticket Dispatch**, **Pre-LLM Zero-Trust RBAC**, **UU PDP PII Masking**, and immutable `audit_logs`. |
 
 ---
 
 ## Automated Benchmark Suite (`10/10 Golden Cases`)
 
-Run live via the **Benchmark** tab or through `pytest`:
+Run live in the **Benchmark** tab (`POST /api/eval/run`) or via `pytest`:
 
 | Metric | Target | Verified Score |
 | :--- | :---: | :---: |
-| **Overall Suite Pass Rate** | `>= 90%` | **100.0% (10/10)** |
-| **Hybrid Retrieval Hit@3 / MRR** | `>= 0.85` | **100.0% / 1.000 MRR** |
-| **Pre-LLM RBAC Leak Prevention** | `100%` | **100.0% Block Rate** |
-| **UU PDP No. 27/2022 PII Redaction** | `100%` | **100.0% Masking Rate** |
-| **Out-of-Domain Hallucination Refusal** | `100%` | **100.0% Refusal Rate** |
-| **Pipeline Latency (`p50` / `p95`)** | `< 500 ms` | **~3 ms / ~5 ms** |
+| **Overall Suite Pass Rate** | `>= 90%` | **100% (10/10)** |
+| **Hybrid Retrieval Hit@3 / MRR** | `>= 0.85` | **100% / 1.000 MRR** |
+| **Pre-LLM RBAC Block Rate** | `100%` | **100% Block Rate** |
+| **UU PDP PII Masking Rate** | `100%` | **100% Masking Rate** |
+| **Out-of-Domain Hallucination Refusal** | `100%` | **100% Refusal Rate** |
+| **Pipeline Latency (`p50` / `p95`)** | `< 500 ms` | **~2.1 ms / ~3.8 ms** |
 
 ---
 
 ## Quickstart
 
-### Option A: One-Command Windows PowerShell Launch
-```powershell
-.\start-dev.ps1
+### Option A: Standalone Frontend + Serverless API (`:3000`)
+Runs the full UI, built-in API routes, Knowledge Vault, Lakehouse SQL, and 10-case Benchmark with zero Python setup:
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-### Option B: Manual Terminal Launch
+### Option B: Full-Stack with Python FastAPI Backend (`:8000` + `:3000`)
 
 **1. Start the Python Backend (`:8000`)**
 ```powershell
@@ -81,17 +84,25 @@ uv pip install -r requirements.txt --python .venv\Scripts\python.exe
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**2. Start the Frontend (`:3000`)**
+**2. Start the Frontend (`:3000`) pointed at FastAPI**
 ```powershell
 cd frontend
 npm install
+$env:NEXT_PUBLIC_API_URL="http://127.0.0.1:8000"
 npm run dev
 ```
+Or launch both windows at once with `.\start-dev.ps1`.
 
-**3. Run the Automated Test Suite**
+**3. Run Verification Tests**
 ```powershell
+# Backend unit + benchmark suite
 cd backend
 .\.venv\Scripts\python.exe -m pytest -v
+
+# Frontend TypeScript & production build check
+cd ..\frontend
+npx tsc --noEmit
+npm run build
 ```
 
 ---
@@ -103,18 +114,26 @@ auditeer/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            # FastAPI endpoints & OpenAPI schema
-│   │   ├── agent.py           # Multi-step Agentic Orchestrator & Trace builder
-│   │   ├── rag_engine.py      # Bilingual Hybrid RAG (BM25 + Dense Cosine + RRF + RBAC)
-│   │   ├── lakehouse.py       # Operational Data Mart, Safe SQL & Incident Dispatcher
-│   │   ├── security.py        # Role-Based Access Control & UU PDP PII Masker
-│   │   ├── llm_gateway.py     # Local Engine, Ollama, Gemini & OpenAI/vLLM Gateway
-│   │   └── evaluator.py       # 10-Case Automated Golden Benchmark Suite
-│   ├── data/knowledge_base/   # Enterprise SOP & Governance Markdown documents
-│   └── tests/                 # Automated pytest unit & benchmark suite
+│   │   ├── agent.py           # Multi-step agent orchestrator & trace builder
+│   │   ├── rag_engine.py      # Bilingual Hybrid RAG (BM25 + Semantic Vector + RRF)
+│   │   ├── lakehouse.py       # SQLite operational tables, Safe SQL & ticket dispatcher
+│   │   ├── security.py        # RBAC role clearance profiles & UU PDP PII masker
+│   │   ├── llm_gateway.py     # Local Grounded Engine, Ollama, Gemini & OpenAI gateway
+│   │   └── evaluator.py       # 10-case golden benchmark runner
+│   ├── data/knowledge_base/   # Sample enterprise SOP & governance Markdown docs
+│   └── tests/                 # Pytest unit & benchmark suite (6/6 passing)
 ├── frontend/
 │   └── src/
-│       ├── app/               # Next.js 15 App Router shell & Navigation
-│       ├── components/        # Workspace, Documents Vault, Data Explorer & Benchmark Lab
-│       └── lib/               # Typed API client & data models
+│       ├── app/
+│       │   ├── api/           # Next.js serverless API routes (chat, documents, lakehouse, eval)
+│       │   ├── icon.svg       # App favicon
+│       │   ├── layout.tsx     # Root layout & Poppins typography
+│       │   └── page.tsx       # Top navigation, role switcher & model selector
+│       ├── components/        # CopilotWorkspace, KnowledgeVaultTab, LakehouseTelemetryTab, EvaluationLabTab
+│       └── lib/
+│           ├── server/        # Standalone serverless engine, docs, lakehouse, security & eval
+│           ├── api.ts         # Typed API client
+│           └── types.ts       # Shared TypeScript interfaces
+├── README.md
 └── start-dev.ps1
 ```
