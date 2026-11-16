@@ -132,6 +132,11 @@ class EvalCaseResult(BaseModel):
     reciprocal_rank: float = 0.0
     sql_verified: bool = True
     guardrail_verified: bool = True
+    sanitized_prompt: str = ""
+    answer: str = ""
+    sql_query: str | None = None
+    pii_masked_count: int = 0
+    rbac_blocked: bool = False
 
 
 class EvalSuiteSummary(BaseModel):

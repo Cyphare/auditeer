@@ -127,6 +127,11 @@ export interface EvalCaseResult {
   reciprocal_rank: number;
   sql_verified: boolean;
   guardrail_verified: boolean;
+  sanitized_prompt?: string;
+  answer?: string;
+  sql_query?: string | null;
+  pii_masked_count?: number;
+  rbac_blocked?: boolean;
 }
 
 export interface EvalSuiteSummary {

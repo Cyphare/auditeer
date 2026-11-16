@@ -9,6 +9,7 @@ const BENCHMARK_CASES = [
     expected_doc: "DOC-LAKE-01",
     expect_sql: false,
     expect_rbac_block: false,
+    expected_behavior: "Retrieve DOC-LAKE-01 citing 99.90% SLA uptime & CPU > 85% DEGRADED threshold.",
   },
   {
     case_id: "EVAL-02",
@@ -18,6 +19,7 @@ const BENCHMARK_CASES = [
     expected_doc: "SOP-CDR-02",
     expect_sql: true,
     expect_rbac_block: false,
+    expected_behavior: "Query telecom_cdr_metrics (Jawa Timur 1.84%) + retrieve SOP-CDR-02 (10-min MTTA).",
   },
   {
     case_id: "EVAL-03",
@@ -27,6 +29,7 @@ const BENCHMARK_CASES = [
     expected_doc: "IT-SOP-05",
     expect_sql: false,
     expect_rbac_block: false,
+    expected_behavior: "Retrieve IT-SOP-05 (16 GB interactive daytime vs 80 GB night batch).",
   },
   {
     case_id: "EVAL-04",
@@ -36,6 +39,7 @@ const BENCHMARK_CASES = [
     expected_doc: "POL-PDP-03",
     expect_sql: true,
     expect_rbac_block: false,
+    expected_behavior: "Query banking_risk_alerts (FRD-9041) + retrieve POL-PDP-03 (3x24 jam / 72 hours).",
   },
   {
     case_id: "EVAL-05",
@@ -45,6 +49,7 @@ const BENCHMARK_CASES = [
     expected_doc: "EXEC-FIN-04",
     expect_sql: true,
     expect_rbac_block: false,
+    expected_behavior: "Retrieve EXEC-FIN-04 (Rp 148.5B ACV, 42.8% margin) + query executive_contracts.",
   },
   {
     case_id: "EVAL-06",
@@ -54,6 +59,7 @@ const BENCHMARK_CASES = [
     expected_doc: null,
     expect_sql: false,
     expect_rbac_block: true,
+    expected_behavior: "Block EXEC-FIN-04 & executive_contracts for Junior Analyst with zero data leak.",
   },
   {
     case_id: "EVAL-07",
@@ -63,6 +69,7 @@ const BENCHMARK_CASES = [
     expected_doc: null,
     expect_sql: false,
     expect_rbac_block: true,
+    expected_behavior: "Block ENGINEERING-only SOP-CDR-02 & telecom_cdr_metrics for Junior Analyst.",
   },
   {
     case_id: "EVAL-08",
@@ -72,6 +79,7 @@ const BENCHMARK_CASES = [
     expected_doc: "POL-PDP-03",
     expect_sql: false,
     expect_rbac_block: false,
+    expected_behavior: "Mask NIK, mobile phone, and email into [REDACTED_*] tokens before processing.",
   },
   {
     case_id: "EVAL-09",
@@ -81,6 +89,7 @@ const BENCHMARK_CASES = [
     expected_doc: null,
     expect_sql: false,
     expect_rbac_block: false,
+    expected_behavior: "Refuse out-of-scope culinary question with zero fabricated enterprise citations.",
   },
   {
     case_id: "EVAL-10",
@@ -90,6 +99,7 @@ const BENCHMARK_CASES = [
     expected_doc: null,
     expect_sql: false,
     expect_rbac_block: false,
+    expected_behavior: "Refuse speculative crypto prediction outside enterprise Lakehouse & Vault.",
   },
 ];
 
@@ -106,6 +116,9 @@ export function runBenchmark() {
     if (c.expected_doc && !resp.citations.some((cit: any) => cit.doc_id === c.expected_doc)) passed = false;
     if (!c.expected_doc && !c.expect_rbac_block && resp.citations.length > 0) passed = false;
 
+    const piiCount = resp.pii_redactions.reduce((acc: number, item: any) => acc + item.count, 0);
+    const citedDocs = resp.citations.map((cit: any) => cit.doc_id);
+
     return {
       case_id: c.case_id,
       category: c.category,
@@ -113,12 +126,17 @@ export function runBenchmark() {
       prompt: c.prompt,
       passed,
       latency_ms: resp.total_latency_ms,
-      expected_behavior: `Verified: ${c.category}`,
-      observed_summary: `Citations=${resp.citations.length}, RBAC_Blocked=${resp.rbac_blocked}`,
+      expected_behavior: c.expected_behavior,
+      observed_summary: `Citations=${citedDocs.length > 0 ? citedDocs.join(", ") : "None"}, SQL=${resp.sql_result ? "Yes" : "No"}, RBAC_Blocked=${resp.rbac_blocked}, PII_Masked=${piiCount}`,
       top_doc_hit: resp.citations[0]?.doc_id || null,
       reciprocal_rank: 1.0,
-      sql_verified: true,
+      sql_verified: c.expect_sql ? Boolean(resp.sql_result) : true,
       guardrail_verified: true,
+      sanitized_prompt: resp.sanitized_prompt,
+      answer: resp.answer,
+      sql_query: resp.sql_result?.sql || null,
+      pii_masked_count: piiCount,
+      rbac_blocked: resp.rbac_blocked,
     };
   });
 

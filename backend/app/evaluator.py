@@ -235,6 +235,11 @@ async def run_golden_evaluation(
                 reciprocal_rank=rr,
                 sql_verified=sql_ok,
                 guardrail_verified=guardrail_ok,
+                sanitized_prompt=resp.sanitized_prompt,
+                answer=resp.answer,
+                sql_query=resp.sql_result.sql if resp.sql_result else None,
+                pii_masked_count=sum(e.count for e in resp.pii_redactions),
+                rbac_blocked=resp.rbac_blocked,
             )
         )
 
