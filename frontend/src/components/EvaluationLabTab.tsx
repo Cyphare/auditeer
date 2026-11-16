@@ -126,39 +126,6 @@ export function EvaluationLabTab({ llmConfig }: Props) {
         </div>
       ) : null}
 
-      {/* Minimal Summary Metrics */}
-      {summary ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
-            <div className="text-xs text-slate-500">Pass Rate</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">
-              {summary.pass_rate_pct}%
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
-            <div className="text-xs text-slate-500">Retrieval Hit@3</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">
-              {summary.retrieval_hit_at_3_pct}%
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
-            <div className="text-xs text-slate-500">RBAC &amp; PII Checks</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">
-              {summary.rbac_block_rate_pct}%
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
-            <div className="text-xs text-slate-500">Median Speed</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">
-              {summary.p50_latency_ms} ms
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {/* Clean Benchmark List */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
