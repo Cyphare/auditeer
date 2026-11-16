@@ -44,11 +44,11 @@ export function processChatRequest(payload: {
   let rbacReason: string | null = null;
 
   const wantsExec = /margin|kontrak|contract|acv|arr|penalti|penalty|financial/i.test(q);
-  const wantsTelco = /cdr|packet|loss|bts|telecom|telekomunikasi|jawa timur/i.test(q);
+  const wantsTelco = !wantsExec && /cdr|packet|loss|bts|telecom|telekomunikasi|jawa timur/i.test(q);
   const wantsFraud = /fraud|bi-fast|bifast|qris|rtgs|skor risiko|risk_score/i.test(q);
-  const wantsCluster = /cluster|klaster|node|cpu|degraded|spark|kafka|telemetry/i.test(q);
-  const wantsSla = /sla|uptime|degraded threshold/i.test(q);
-  const wantsGpu = /gpu|vram|yogyakarta/i.test(q);
+  const wantsGpu = /gpu|vram|yogyakarta|jam kerja|batch malam/i.test(q);
+  const wantsSla = !wantsExec && /sla|uptime|degraded/i.test(q);
+  const wantsCluster = !wantsGpu && !wantsExec && /cluster|klaster|node|cpu|degraded|spark|kafka|telemetry/i.test(q);
 
   // Check role restrictions
   if (wantsExec && !profile.allowed_clearances.includes("EXECUTIVE")) {
@@ -68,23 +68,30 @@ export function processChatRequest(payload: {
       (wantsExec && doc.doc_id === "EXEC-FIN-04") ||
       (wantsTelco && doc.doc_id === "SOP-CDR-02") ||
       (wantsFraud && doc.doc_id === "POL-PDP-03") ||
-      ((wantsCluster || wantsSla) && doc.doc_id === "DOC-LAKE-01") ||
       (wantsGpu && doc.doc_id === "IT-SOP-05") ||
+      ((wantsCluster || wantsSla) && doc.doc_id === "DOC-LAKE-01") ||
       (/pdp|privasi|privacy|nik/i.test(q) && doc.doc_id === "POL-PDP-03");
 
     if (isDocMatch) {
       const allowed = profile.allowed_clearances.includes(doc.clearance);
+      let secIdx = 0;
+      if (doc.doc_id === "DOC-LAKE-01" && wantsSla && doc.sections[1]) {
+        secIdx = 1;
+      } else if (doc.doc_id === "IT-SOP-05" && wantsGpu && doc.sections[1]) {
+        secIdx = 1;
+      }
+      const chosenSection = doc.sections[secIdx] || doc.sections[0];
       const targetChunk = {
-        chunk_id: `${doc.doc_id}#C1`,
+        chunk_id: `${doc.doc_id}#C${secIdx + 1}`,
         doc_id: doc.doc_id,
         title: doc.title,
-        section: doc.sections[0].heading,
+        section: chosenSection.heading,
         category: doc.category,
         clearance: doc.clearance,
         bm25_score: 3.4,
         vector_score: 0.28,
         rrf_score: 0.048,
-        snippet: doc.sections[0].content,
+        snippet: chosenSection.content,
         access_granted: allowed,
       };
 
@@ -232,7 +239,7 @@ export function processChatRequest(payload: {
 
     if (citations.length > 0) {
       const bulletPoints = citations
-        .map((c) => `- **\`[${c.doc_id}]\` ${c.section}:** ${c.snippet.substring(0, 220)}...`)
+        .map((c) => `- **\`[${c.doc_id}]\` ${c.section}:** ${c.snippet}`)
         .join("\n");
       sections.push(bulletPoints);
     }
