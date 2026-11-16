@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       preview: accessible
         ? d.sections[0].content
         : `[LOCKED — Requires ${d.clearance} clearance]`,
+      sections: accessible ? d.sections : [],
     };
   });
 

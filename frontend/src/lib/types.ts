@@ -111,6 +111,7 @@ export interface VaultDocument {
   chunk_count: number;
   accessible: boolean;
   preview: string;
+  sections?: { heading: string; content: string }[];
 }
 
 export interface EvalCaseResult {

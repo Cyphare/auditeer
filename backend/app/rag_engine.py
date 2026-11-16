@@ -483,6 +483,11 @@ class HybridRAGEngine:
                         if accessible
                         else f"[LOCKED — Requires {doc.clearance} clearance]"
                     ),
+                    "sections": (
+                        [{"heading": c.section, "content": c.content} for c in self.chunks if c.doc_id == doc.doc_id]
+                        if accessible
+                        else []
+                    ),
                 }
             )
         return docs

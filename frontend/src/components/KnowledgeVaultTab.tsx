@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Lock, Plus, Search, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronUp, Lock, Plus, Search, X } from "lucide-react";
 import {
   fetchDocuments,
   ingestDocument,
@@ -22,6 +22,7 @@ interface Props {
 export function KnowledgeVaultTab({ activeRole, onVaultUpdated }: Props) {
   const [docs, setDocs] = useState<VaultDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
 
   // Optional Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -278,36 +279,126 @@ export function KnowledgeVaultTab({ activeRole, onVaultUpdated }: Props) {
         {loadingDocs ? (
           <p className="text-sm text-slate-500">Loading...</p>
         ) : (
-          docs.map((doc) => (
-            <div
-              key={doc.doc_id}
-              className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-medium text-slate-700">
-                    {doc.doc_id}
-                  </span>
-                  <h2 className="text-[15px] font-semibold text-slate-900">
-                    {doc.title}
-                  </h2>
-                </div>
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    doc.accessible
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
+          docs.map((doc) => {
+            const isExpanded = expandedDocId === doc.doc_id;
+            return (
+              <div
+                key={doc.doc_id}
+                className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition hover:border-slate-300"
+              >
+                <div
+                  className="flex flex-wrap items-center justify-between gap-2 cursor-pointer select-none"
+                  onClick={() =>
+                    setExpandedDocId(isExpanded ? null : doc.doc_id)
+                  }
                 >
-                  {!doc.accessible ? <Lock className="h-3 w-3" /> : null}
-                  {doc.clearance}
-                </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-medium text-slate-700">
+                      {doc.doc_id}
+                    </span>
+                    <h2 className="text-[15px] font-semibold text-slate-900">
+                      {doc.title}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        doc.accessible
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {!doc.accessible ? <Lock className="h-3 w-3" /> : null}
+                      {doc.clearance}
+                    </span>
+                    {doc.accessible ? (
+                      <button
+                        type="button"
+                        aria-label="Toggle document details"
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {!isExpanded ? (
+                  <div
+                    className="mt-2 cursor-pointer"
+                    onClick={() =>
+                      doc.accessible && setExpandedDocId(doc.doc_id)
+                    }
+                  >
+                    <p className="text-sm leading-relaxed text-slate-600 line-clamp-2">
+                      {doc.preview}
+                    </p>
+                    {doc.accessible && (
+                      <p className="mt-2 text-xs font-medium text-blue-600 flex items-center gap-1">
+                        <BookOpen className="h-3.5 w-3.5" />
+                        {doc.sections && doc.sections.length > 0
+                          ? `View all ${doc.sections.length} sections & full text`
+                          : "Read full document"}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+                    {/* Document Meta */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 bg-slate-50 rounded-lg p-2.5">
+                      <div>
+                        <span className="font-medium text-slate-700">Category:</span> {doc.category}
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Owner:</span> {doc.owner}
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Updated:</span> {doc.last_updated}
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Sections:</span> {doc.chunk_count}
+                      </div>
+                    </div>
+
+                    {/* All Sections */}
+                    <div className="space-y-3">
+                      {doc.sections && doc.sections.length > 0 ? (
+                        doc.sections.map((sec, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded-xl border border-slate-200/70 bg-slate-50/50 p-3.5"
+                          >
+                            <h3 className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
+                              {sec.heading}
+                            </h3>
+                            <p className="mt-1.5 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
+                              {sec.content}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-600 whitespace-pre-line">
+                          {doc.preview}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDocId(null)}
+                      className="text-xs font-medium text-slate-500 hover:text-slate-800"
+                    >
+                      ▲ Close full document
+                    </button>
+                  </div>
+                )}
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                {doc.preview}
-              </p>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
