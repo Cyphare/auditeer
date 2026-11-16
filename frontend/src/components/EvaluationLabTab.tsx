@@ -27,6 +27,10 @@ export function EvaluationLabTab({ llmConfig }: Props) {
     }
   };
 
+  React.useEffect(() => {
+    handleRun();
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Simple Header */}
