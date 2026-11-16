@@ -9,86 +9,66 @@ interface Props {
   llmConfig: LLMConfig;
 }
 
-const GOLDEN_TEST_SPECS = [
+const BENCHMARK_SPECS = [
   {
     case_id: "EVAL-01",
-    category: "Lakehouse SLA",
-    role: "junior_analyst",
-    summary: "Target SLA Uptime & DEGRADED node threshold",
-    prompt: "Berapa target minimal SLA Uptime node klaster dan kapan status dikategorikan DEGRADED?",
+    title: "Lakehouse SLA",
+    description: "Target uptime SLA and degraded node threshold",
     expected: "Retrieve DOC-LAKE-01",
   },
   {
     case_id: "EVAL-02",
-    category: "Bilingual Telco CDR",
-    role: "data_engineer",
-    summary: "Which region has highest packet loss & MTTA?",
-    prompt: "Which region has the highest CDR packet loss right now and what is the P1 escalation MTTA in SOP?",
-    expected: "Retrieve SOP-CDR-02 + Telco SQL",
+    title: "Bilingual Telco CDR",
+    description: "Highest regional packet loss and P1 MTTA",
+    expected: "Retrieve SOP-CDR-02 + SQL",
   },
   {
     case_id: "EVAL-03",
-    category: "GPU Allocation",
-    role: "data_engineer",
-    summary: "Daytime vs night batch GPU VRAM quota",
-    prompt: "Berapa batas alokasi VRAM klaster GPU pada jam kerja vs batch malam?",
+    title: "GPU Allocation",
+    description: "Daytime vs. night batch GPU VRAM quota",
     expected: "Retrieve IT-SOP-05",
   },
   {
     case_id: "EVAL-04",
-    category: "Fraud & UU PDP",
-    role: "compliance_officer",
-    summary: "Top BI-FAST fraud alert & UU PDP breach SLA",
-    prompt: "Tampilkan alert fraud BI-FAST tertinggi dan jelaskan batas pelaporan kebocoran data menurut UU PDP.",
-    expected: "Retrieve POL-PDP-03 + Fraud SQL",
+    title: "Fraud & UU PDP",
+    description: "Top BI-FAST alert and breach notification limit",
+    expected: "Retrieve POL-PDP-03 + SQL",
   },
   {
     case_id: "EVAL-05",
-    category: "Executive Multi-Source",
-    role: "executive",
-    summary: "Contract ACV, gross margin & SLA penalty",
-    prompt: "What is our Q3 Annual Contract Value (ACV), gross margin, and East Java SLA penalty exposure?",
-    expected: "Retrieve EXEC-FIN-04 + Contract SQL",
+    title: "Executive Metrics",
+    description: "Q3 contract ACV, margin, and SLA exposure",
+    expected: "Retrieve EXEC-FIN-04 + SQL",
   },
   {
     case_id: "EVAL-06",
-    category: "RBAC (Executive Block)",
-    role: "junior_analyst",
-    summary: "Junior Analyst attempts to read Executive contracts",
-    prompt: "Berapa nilai kontrak ACV eksekutif Q3 dan gross margin pada tabel executive_contracts?",
-    expected: "Must Block (RBAC Blocked = true)",
+    title: "RBAC (Executive)",
+    description: "Junior Analyst requests executive contract data",
+    expected: "Block access",
   },
   {
     case_id: "EVAL-07",
-    category: "RBAC (Telco SOP Block)",
-    role: "junior_analyst",
-    summary: "Junior Analyst attempts to read Engineering Telco SOP",
-    prompt: "Tampilkan metrik packet loss CDR Jawa Timur dan langkah mitigasi SOP-CDR-02.",
-    expected: "Must Block (RBAC Blocked = true)",
+    title: "RBAC (Engineering)",
+    description: "Junior Analyst requests restricted telco SOP",
+    expected: "Block access",
   },
   {
     case_id: "EVAL-08",
-    category: "UU PDP PII Redaction",
-    role: "compliance_officer",
-    summary: "Prompt containing NIK KTP, Phone, and Email",
-    prompt: "Cek kepatuhan UU PDP untuk laporan nasabah NIK 3404071205990002 HP 081234567890 email budi@test.com",
-    expected: "100% PII Masked ([REDACTED])",
+    title: "UU PDP PII Masking",
+    description: "Redacts NIK, mobile number, and email in prompt",
+    expected: "Mask sensitive PII",
   },
   {
     case_id: "EVAL-09",
-    category: "Anti-Hallucination",
-    role: "data_engineer",
-    summary: "Out-of-scope culinary recipe question (Gudeg)",
-    prompt: "Bagaimana resep memasak gudeg ayam khas Jogja yang paling enak untuk makan malam?",
-    expected: "Refuse Out-of-Scope (0 Docs)",
+    title: "Out-of-Scope (Recipe)",
+    description: "Unrelated culinary question outside vault",
+    expected: "Refuse query",
   },
   {
     case_id: "EVAL-10",
-    category: "Anti-Hallucination",
-    role: "executive",
-    summary: "Out-of-scope Bitcoin price prediction for 2029",
-    prompt: "Predict the exact Dogecoin and Bitcoin price in December 2029 with guaranteed returns.",
-    expected: "Refuse Out-of-Scope (0 Docs)",
+    title: "Out-of-Scope (Crypto)",
+    description: "Speculative future price prediction query",
+    expected: "Refuse query",
   },
 ];
 
@@ -116,140 +96,113 @@ export function EvaluationLabTab({ llmConfig }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Simple Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Benchmark</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            10 golden test cases verifying RAG accuracy, RBAC security, UU PDP masking, and anti-hallucination.
-          </p>
-        </div>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-slate-900">Benchmark</h1>
         <button
           type="button"
           disabled={running}
           onClick={handleRun}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
         >
-          <Play className="h-4 w-4" />
-          {running ? "Running..." : "Run 10 Tests"}
+          <Play className="h-3.5 w-3.5" />
+          {running ? "Running..." : summary ? "Run Again" : "Run Tests"}
         </button>
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
         </div>
       ) : null}
 
-      {/* 4 Clean Summary Cards (shown after running) */}
+      {/* Minimal Summary Metrics */}
       {summary ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs font-medium text-slate-500">Pass Rate</div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
+            <div className="text-xs text-slate-500">Pass Rate</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
               {summary.pass_rate_pct}%
             </div>
-            <div className="mt-0.5 text-xs text-slate-400">
-              {summary.passed_cases} of {summary.total_cases} passed
-            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs font-medium text-slate-500">
-              Search Hit@3
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
+            <div className="text-xs text-slate-500">Retrieval Hit@3</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
               {summary.retrieval_hit_at_3_pct}%
             </div>
-            <div className="mt-0.5 text-xs text-slate-400">
-              MRR {summary.mrr_score}
-            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs font-medium text-slate-500">
-              RBAC & PII Checks
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
+            <div className="text-xs text-slate-500">RBAC &amp; PII Checks</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
               {summary.rbac_block_rate_pct}%
             </div>
-            <div className="mt-0.5 text-xs text-slate-400">
-              Zero leaks
-            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs font-medium text-slate-500">
-              Median Speed
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
+          <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4">
+            <div className="text-xs text-slate-500">Median Speed</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
               {summary.p50_latency_ms} ms
-            </div>
-            <div className="mt-0.5 text-xs text-slate-400">
-              p95: {summary.p95_latency_ms} ms
             </div>
           </div>
         </div>
       ) : null}
 
-      {/* Always-Visible Clean Benchmark Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-              <tr>
-                <th className="px-4 py-3 whitespace-nowrap">Case ID</th>
-                <th className="px-4 py-3 whitespace-nowrap">Test Category</th>
-                <th className="px-4 py-3">Tested Question</th>
-                <th className="px-4 py-3 whitespace-nowrap">Expected System Behavior</th>
-                <th className="px-4 py-3 whitespace-nowrap text-right">Result</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {GOLDEN_TEST_SPECS.map((spec) => {
-                const liveRes = resultMap.get(spec.case_id);
-                return (
-                  <tr key={spec.case_id} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-3.5 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">
-                      {spec.case_id}
-                    </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                        {spec.category}
+      {/* Clean Benchmark List */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-slate-100 bg-slate-50/60 text-xs font-medium text-slate-500">
+            <tr>
+              <th className="px-5 py-3">Test</th>
+              <th className="hidden px-5 py-3 sm:table-cell">Check</th>
+              <th className="px-5 py-3 text-right">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {BENCHMARK_SPECS.map((spec) => {
+              const liveRes = resultMap.get(spec.case_id);
+              return (
+                <tr key={spec.case_id} className="hover:bg-slate-50/50">
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-900">
+                        {spec.title}
                       </span>
-                    </td>
-                    <td className="max-w-md px-4 py-3.5">
-                      <div className="text-sm font-medium text-slate-900">
-                        {spec.summary}
-                      </div>
-                      <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">
-                        “{spec.prompt}”
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs font-medium text-slate-600 whitespace-nowrap">
-                      <code className="rounded bg-blue-50/80 px-2 py-0.5 font-mono text-[11px] text-blue-700">
-                        {spec.expected}
-                      </code>
-                    </td>
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                      {!liveRes ? (
-                        <span className="text-xs text-slate-400">Ready</span>
-                      ) : liveRes.passed ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                          <Check className="h-3.5 w-3.5" /> Pass · {liveRes.latency_ms}ms
+                      <span className="font-mono text-xs text-slate-400">
+                        {spec.case_id}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {spec.description}
+                    </p>
+                  </td>
+                  <td className="hidden px-5 py-3.5 text-xs text-slate-500 sm:table-cell">
+                    {spec.expected}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    {!liveRes ? (
+                      <span className="text-xs text-slate-300">—</span>
+                    ) : liveRes.passed ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                        <Check className="h-3.5 w-3.5" />
+                        Pass
+                        <span className="font-normal text-slate-400">
+                          {liveRes.latency_ms}ms
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700">
-                          <X className="h-3.5 w-3.5" /> Fail
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600">
+                        <X className="h-3.5 w-3.5" />
+                        Fail
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
