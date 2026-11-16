@@ -3,24 +3,35 @@
 import React from "react";
 
 function renderInlineFormatting(text: string): React.ReactNode[] {
-  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[A-Z]{2,6}-[A-Z0-9-]+\])/g;
+  const pattern = /(\*\*[^*]+\*\*|\*[^*\s][^*]*?\*|`[^`]+`|\[[A-Z]{2,6}-[A-Z0-9-]+\])/g;
   const parts = text.split(pattern);
 
   return parts.map((part, idx) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
         <strong key={idx} className="font-semibold text-slate-900">
-          {part.slice(2, -2)}
+          {renderInlineFormatting(part.slice(2, -2))}
         </strong>
       );
     }
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      return (
+        <em key={idx} className="italic">
+          {renderInlineFormatting(part.slice(1, -1))}
+        </em>
+      );
+    }
     if (part.startsWith("`") && part.endsWith("`")) {
+      const inner = part.slice(1, -1);
+      if (/^\[[A-Z]{2,6}-[A-Z0-9-]+\]$/.test(inner)) {
+        return <React.Fragment key={idx}>{renderInlineFormatting(inner)}</React.Fragment>;
+      }
       return (
         <code
           key={idx}
           className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-slate-800"
         >
-          {part.slice(1, -1)}
+          {inner}
         </code>
       );
     }

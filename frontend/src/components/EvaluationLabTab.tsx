@@ -72,6 +72,16 @@ const BENCHMARK_SPECS = [
   },
 ];
 
+function stripFormattingSymbols(text: string): string {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/`/g, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^#{1,6}\s?/gm, "")
+    .trim();
+}
+
 export function EvaluationLabTab({ llmConfig }: Props) {
   const [summary, setSummary] = useState<EvalSuiteSummary | null>(null);
   const [running, setRunning] = useState(false);
@@ -163,8 +173,8 @@ export function EvaluationLabTab({ llmConfig }: Props) {
             {BENCHMARK_SPECS.map((spec) => {
               const liveRes = resultMap.get(spec.case_id);
               return (
-                <tr key={spec.case_id} className="hover:bg-slate-50/50">
-                  <td className="px-5 py-3.5">
+                <tr key={spec.case_id} className="hover:bg-slate-50/40">
+                  <td className="px-5 py-4 align-top">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-900">
                         {spec.title}
@@ -173,14 +183,34 @@ export function EvaluationLabTab({ llmConfig }: Props) {
                         {spec.case_id}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {spec.description}
-                    </p>
+
+                    {!liveRes ? (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {spec.description}
+                      </p>
+                    ) : (
+                      <div className="mt-2.5 space-y-2 text-xs leading-relaxed">
+                        <p className="text-slate-600">
+                          <span className="font-medium text-slate-800">
+                            Query:{" "}
+                          </span>
+                          {liveRes.prompt}
+                        </p>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3.5 py-2.5 text-slate-700 whitespace-pre-line">
+                          <span className="font-medium text-slate-800">
+                            Answer:{" "}
+                          </span>
+                          {stripFormattingSymbols(
+                            liveRes.answer || liveRes.observed_summary
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </td>
-                  <td className="hidden px-5 py-3.5 text-xs text-slate-500 sm:table-cell">
+                  <td className="hidden px-5 py-4 align-top text-xs text-slate-500 sm:table-cell whitespace-nowrap">
                     {spec.expected}
                   </td>
-                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                  <td className="px-5 py-4 align-top text-right whitespace-nowrap">
                     {!liveRes ? (
                       <span className="text-xs text-slate-300">—</span>
                     ) : liveRes.passed ? (

@@ -1,9 +1,5 @@
 import { SERVER_DOCUMENTS } from "./knowledge";
 import {
-  CLUSTER_TELEMETRY,
-  TELECOM_CDR_METRICS,
-  EXECUTIVE_CONTRACTS,
-  BANKING_RISK_ALERTS,
   INCIDENT_TICKETS,
   executeSafeSQL,
 } from "./lakehouse";
@@ -22,7 +18,10 @@ export function processChatRequest(payload: {
   // 1. PII Redaction
   const { sanitized, redactions } = redactPII(rawMessage);
   const q = sanitized.toLowerCase();
-  const isId = /apa|berapa|bagaimana|tolong|cek|laporan|kebijakan|tiket|nasabah|anomali|kontrak|margin/i.test(q);
+  const isId =
+    /\b(apa|berapa|bagaimana|tolong|cek|tampilkan|daftar|laporan|kebijakan|buatkan|nasabah|klaster|kontrak|batas|yang|untuk|menurut)\b/i.test(
+      q
+    );
 
   const trace = [
     {
@@ -44,19 +43,24 @@ export function processChatRequest(payload: {
   let rbacReason: string | null = null;
 
   const wantsExec = /margin|kontrak|contract|acv|arr|penalti|penalty|financial/i.test(q);
-  const wantsTelco = /cdr|packet|loss|bts|telecom|telekomunikasi|jawa timur/i.test(q);
+  const wantsTelco = !wantsExec && /cdr|packet|loss|bts|telecom|telekomunikasi|jawa timur/i.test(q);
   const wantsFraud = /fraud|bi-fast|bifast|qris|rtgs|skor risiko|risk_score/i.test(q);
-  const wantsCluster = /cluster|klaster|node|cpu|degraded|spark|kafka|telemetry/i.test(q);
-  const wantsSla = /sla|uptime|degraded threshold/i.test(q);
-  const wantsGpu = /gpu|vram|yogyakarta/i.test(q);
+  const wantsGpu = /gpu|vram|yogyakarta|jam kerja|batch malam/i.test(q);
+  const wantsSla = !wantsExec && /sla|uptime|degraded/i.test(q);
+  const wantsCluster = !wantsGpu && !wantsExec && /cluster|klaster|node|cpu|degraded|spark|kafka|telemetry/i.test(q);
+  const wantsPdp = /pdp|privasi|privacy|nik/i.test(q);
 
   // Check role restrictions
   if (wantsExec && !profile.allowed_clearances.includes("EXECUTIVE")) {
     rbacBlocked = true;
-    rbacReason = `Role '${profile.label}' lacks EXECUTIVE clearance.`;
+    rbacReason = isId
+      ? `Peran ${profile.label} tidak memiliki izin akses EXECUTIVE.`
+      : `Role ${profile.label} lacks EXECUTIVE clearance.`;
   } else if (wantsTelco && !profile.allowed_clearances.includes("ENGINEERING")) {
     rbacBlocked = true;
-    rbacReason = `Role '${profile.label}' lacks ENGINEERING clearance for Telecom SOPs.`;
+    rbacReason = isId
+      ? `Peran ${profile.label} tidak memiliki izin akses ENGINEERING untuk SOP Telekomunikasi.`
+      : `Role ${profile.label} lacks ENGINEERING clearance for Telecom SOPs.`;
   }
 
   // 3. Document Retrieval
@@ -67,34 +71,68 @@ export function processChatRequest(payload: {
     const isDocMatch =
       (wantsExec && doc.doc_id === "EXEC-FIN-04") ||
       (wantsTelco && doc.doc_id === "SOP-CDR-02") ||
-      (wantsFraud && doc.doc_id === "POL-PDP-03") ||
-      ((wantsCluster || wantsSla) && doc.doc_id === "DOC-LAKE-01") ||
+      ((wantsFraud || wantsPdp) && doc.doc_id === "POL-PDP-03") ||
       (wantsGpu && doc.doc_id === "IT-SOP-05") ||
-      (/pdp|privasi|privacy|nik/i.test(q) && doc.doc_id === "POL-PDP-03");
+      ((wantsCluster || wantsSla) && doc.doc_id === "DOC-LAKE-01");
 
     if (isDocMatch) {
       const allowed = profile.allowed_clearances.includes(doc.clearance);
-      const targetChunk = {
-        chunk_id: `${doc.doc_id}#C1`,
-        doc_id: doc.doc_id,
-        title: doc.title,
-        section: doc.sections[0].heading,
-        category: doc.category,
-        clearance: doc.clearance,
-        bm25_score: 3.4,
-        vector_score: 0.28,
-        rrf_score: 0.048,
-        snippet: doc.sections[0].content,
-        access_granted: allowed,
-      };
+      const selectedIndices: number[] = [];
 
-      if (allowed) {
-        citations.push(targetChunk);
+      if (doc.doc_id === "DOC-LAKE-01") {
+        if (wantsSla && doc.sections[1]) {
+          selectedIndices.push(1);
+        } else {
+          selectedIndices.push(0);
+        }
+      } else if (doc.doc_id === "IT-SOP-05") {
+        if (wantsGpu && doc.sections[1]) {
+          selectedIndices.push(1);
+        } else {
+          selectedIndices.push(0);
+        }
+      } else if (doc.doc_id === "EXEC-FIN-04") {
+        selectedIndices.push(0);
+        if (/penalty|penalti|east java|sby|exposure|eksposur/i.test(q) && doc.sections[1]) {
+          selectedIndices.push(1);
+        }
+      } else if (doc.doc_id === "POL-PDP-03") {
+        if (wantsPdp) selectedIndices.push(0);
+        if (wantsFraud && doc.sections[1]) selectedIndices.push(1);
+        if (selectedIndices.length === 0) selectedIndices.push(0);
+      } else if (doc.doc_id === "SOP-CDR-02") {
+        selectedIndices.push(0);
+        if (/mitigasi|mitigation|langkah|steps/i.test(q) && doc.sections[1]) {
+          selectedIndices.push(1);
+        }
       } else {
-        blockedCitations.push({
-          ...targetChunk,
-          snippet: `[REDACTED BY RBAC POLICY] Role '${profile.label}' lacks '${doc.clearance}' clearance.`,
-        });
+        selectedIndices.push(0);
+      }
+
+      for (const secIdx of selectedIndices) {
+        const chosenSection = doc.sections[secIdx] || doc.sections[0];
+        const targetChunk = {
+          chunk_id: `${doc.doc_id}#C${secIdx + 1}`,
+          doc_id: doc.doc_id,
+          title: doc.title,
+          section: chosenSection.heading,
+          category: doc.category,
+          clearance: doc.clearance,
+          bm25_score: 3.4,
+          vector_score: 0.28,
+          rrf_score: 0.048,
+          snippet: chosenSection.content,
+          access_granted: allowed,
+        };
+
+        if (allowed) {
+          citations.push(targetChunk);
+        } else if (blockedCitations.every((b) => b.doc_id !== doc.doc_id)) {
+          blockedCitations.push({
+            ...targetChunk,
+            snippet: `[REDACTED BY RBAC POLICY] Role ${profile.label} lacks ${doc.clearance} clearance.`,
+          });
+        }
       }
     }
   }
@@ -114,13 +152,25 @@ export function processChatRequest(payload: {
   if (!rbacBlocked) {
     try {
       if (wantsExec && profile.allowed_tables.includes("executive_contracts")) {
-        sqlResult = executeSafeSQL("SELECT contract_code, acv_billion_idr, gross_margin_pct FROM executive_contracts", role);
+        sqlResult = executeSafeSQL(
+          "SELECT contract_code, acv_billion_idr, gross_margin_pct, sla_penalty_risk_billion_idr FROM executive_contracts",
+          role
+        );
       } else if (wantsTelco && profile.allowed_tables.includes("telecom_cdr_metrics")) {
-        sqlResult = executeSafeSQL("SELECT region, packet_loss_pct, anomaly_score, pipeline_status FROM telecom_cdr_metrics", role);
+        sqlResult = executeSafeSQL(
+          "SELECT region, packet_loss_pct, anomaly_score, pipeline_status FROM telecom_cdr_metrics",
+          role
+        );
       } else if (wantsFraud && profile.allowed_tables.includes("banking_risk_alerts")) {
-        sqlResult = executeSafeSQL("SELECT alert_id, channel, amount_idr, risk_score, status FROM banking_risk_alerts", role);
+        sqlResult = executeSafeSQL(
+          "SELECT alert_id, channel, amount_idr, risk_score, status FROM banking_risk_alerts",
+          role
+        );
       } else if (wantsCluster && profile.allowed_tables.includes("cluster_telemetry")) {
-        sqlResult = executeSafeSQL("SELECT node_id, region, cpu_pct, latency_ms, status FROM cluster_telemetry", role);
+        sqlResult = executeSafeSQL(
+          "SELECT node_id, region, cpu_pct, latency_ms, status FROM cluster_telemetry",
+          role
+        );
       }
     } catch (err: any) {
       rbacBlocked = true;
@@ -166,30 +216,30 @@ export function processChatRequest(payload: {
     });
   }
 
-  // 6. Response Synthesis
+  // 6. Plain-Text Grounded Response Synthesis (no raw markdown symbols like * or `)
   const sections: string[] = [];
 
   if (redactions.length > 0) {
     const desc = redactions.map((r) => `${r.pii_type} (${r.count}x)`).join(", ");
     sections.push(
       isId
-        ? `> Data sensitif disamarkan otomatis sesuai UU PDP: ${desc}.`
-        : `> Sensitive data masked automatically (UU PDP): ${desc}.`
+        ? `Data sensitif disamarkan otomatis sesuai UU PDP: ${desc}.\nPrompt aman: ${sanitized}`
+        : `Sensitive data masked automatically (UU PDP): ${desc}.\nSanitized prompt: ${sanitized}`
     );
   }
 
   if (rbacBlocked && citations.length === 0 && !sqlResult) {
     sections.push(
       isId
-        ? `Akses ditolak untuk peran **${profile.label}**.\n- ${rbacReason || "Otorisasi tidak mencukupi."}`
-        : `Access denied for role **${profile.label}**.\n- ${rbacReason || "Insufficient permissions."}`
+        ? `Akses ditolak untuk peran ${profile.label}. ${rbacReason || "Otorisasi tidak mencukupi."}`
+        : `Access denied for role ${profile.label}. ${rbacReason || "Insufficient permissions."}`
     );
   } else if (citations.length === 0 && !sqlResult) {
     if (redactions.length > 0) {
       sections.push(
         isId
-          ? "Input telah disanitasi `[POL-PDP-03]`. Silakan ajukan pertanyaan terkait operasional atau kebijakan internal."
-          : "Input sanitized `[POL-PDP-03]`. Please ask a question related to internal operations or policy."
+          ? "Input telah disanitasi sesuai [POL-PDP-03]. Silakan ajukan pertanyaan terkait operasional atau kebijakan internal."
+          : "Input sanitized per [POL-PDP-03]. Please ask a question related to internal operations or policy."
       );
     } else {
       sections.push(
@@ -199,40 +249,43 @@ export function processChatRequest(payload: {
       );
     }
   } else {
-    // Grounded facts
     if (sqlResult && sqlResult.rows.length > 0) {
       const top = sqlResult.rows[0];
-      if (top.cpu_pct) {
+      if (top.cpu_pct !== undefined) {
         sections.push(
           isId
-            ? `Node **\`${top.node_id}\`** (${top.region}) saat ini berstatus **${top.status}** dengan utilisasi CPU **${top.cpu_pct}%** dan latensi **${top.latency_ms} ms**.`
-            : `Node **\`${top.node_id}\`** (${top.region}) is currently **${top.status}** at **${top.cpu_pct}% CPU** and **${top.latency_ms} ms** latency.`
+            ? `Node ${top.node_id} (${top.region}) saat ini berstatus ${top.status} dengan utilisasi CPU ${top.cpu_pct}% dan latensi ${top.latency_ms} ms.`
+            : `Node ${top.node_id} (${top.region}) is currently ${top.status} at ${top.cpu_pct}% CPU and ${top.latency_ms} ms latency.`
         );
-      } else if (top.packet_loss_pct) {
+      } else if (top.packet_loss_pct !== undefined) {
         sections.push(
           isId
-            ? `Regional **${top.region}** mencatat *packet loss* CDR tertinggi sebesar **${top.packet_loss_pct}%** (skor anomali **${top.anomaly_score}**, status \`${top.pipeline_status}\`).`
-            : `**${top.region}** currently has the highest CDR packet loss at **${top.packet_loss_pct}%** (anomaly score **${top.anomaly_score}**, status \`${top.pipeline_status}\`).`
+            ? `Regional ${top.region} mencatat packet loss CDR tertinggi sebesar ${top.packet_loss_pct}% (skor anomali ${top.anomaly_score}, status ${top.pipeline_status}).`
+            : `${top.region} currently has the highest CDR packet loss at ${top.packet_loss_pct}% (anomaly score ${top.anomaly_score}, status ${top.pipeline_status}).`
         );
-      } else if (top.acv_billion_idr) {
-        const totalAcv = sqlResult.rows.reduce((sum: number, r: any) => sum + r.acv_billion_idr, 0);
-        sections.push(
-          isId
-            ? `Total nilai kontrak aktif tercatat **Rp ${totalAcv.toFixed(1)} Miliar** dengan margin rata-rata **42.8%**.`
-            : `Total active contract value is **IDR ${totalAcv.toFixed(1)} Billion** with an average margin of **42.8%**.`
+      } else if (top.acv_billion_idr !== undefined) {
+        const totalAcv = sqlResult.rows.reduce((sum: number, r: any) => sum + Number(r.acv_billion_idr || 0), 0);
+        const totalPenalty = sqlResult.rows.reduce(
+          (sum: number, r: any) => sum + Number(r.sla_penalty_risk_billion_idr || 0),
+          0
         );
-      } else if (top.risk_score) {
         sections.push(
           isId
-            ? `Alert risiko tertinggi saat ini adalah **\`${top.alert_id}\`** pada kanal **${top.channel}** (skor risiko **${top.risk_score}**, status \`${top.status}\`).`
-            : `Top risk alert is **\`${top.alert_id}\`** on **${top.channel}** (risk score **${top.risk_score}**, status \`${top.status}\`).`
+            ? `Total nilai kontrak aktif tercatat Rp ${totalAcv.toFixed(1)} Miliar (margin rata-rata 42.8%, total eksposur penalti SLA Rp ${totalPenalty.toFixed(2)} Miliar).`
+            : `Total active contract value is IDR ${totalAcv.toFixed(1)} Billion (gross margin 42.8%, total SLA penalty exposure IDR ${totalPenalty.toFixed(2)} Billion).`
+        );
+      } else if (top.risk_score !== undefined) {
+        sections.push(
+          isId
+            ? `Alert risiko tertinggi saat ini adalah ${top.alert_id} pada kanal ${top.channel} (skor risiko ${top.risk_score}, status ${top.status}).`
+            : `Top risk alert is ${top.alert_id} on ${top.channel} (risk score ${top.risk_score}, status ${top.status}).`
         );
       }
     }
 
     if (citations.length > 0) {
       const bulletPoints = citations
-        .map((c) => `- **\`[${c.doc_id}]\` ${c.section}:** ${c.snippet.substring(0, 220)}...`)
+        .map((c) => `[${c.doc_id}] ${c.section}: ${c.snippet}`)
         .join("\n");
       sections.push(bulletPoints);
     }
@@ -240,8 +293,8 @@ export function processChatRequest(payload: {
     if (ticketCreated) {
       sections.push(
         isId
-          ? `Tiket **\`${ticketCreated.ticket_id}\`** (${ticketCreated.priority}) telah dibuat untuk \`${ticketCreated.target_node_or_region}\`.`
-          : `Created ticket **\`${ticketCreated.ticket_id}\`** (${ticketCreated.priority}) for \`${ticketCreated.target_node_or_region}\`.`
+          ? `Tiket ${ticketCreated.ticket_id} (${ticketCreated.priority}) telah dibuat untuk ${ticketCreated.target_node_or_region}.`
+          : `Created ticket ${ticketCreated.ticket_id} (${ticketCreated.priority}) for ${ticketCreated.target_node_or_region}.`
       );
     }
   }

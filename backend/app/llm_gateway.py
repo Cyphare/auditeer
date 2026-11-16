@@ -26,7 +26,8 @@ def _build_system_prompt(role: RoleType) -> str:
         "1. Answer concisely using ONLY [AUTHORIZED KNOWLEDGE CHUNKS] and [LAKEHOUSE SQL RESULTS].\n"
         "2. Cite document IDs inline like [DOC-LAKE-01].\n"
         "3. Never invent facts. If outside scope, briefly state no internal data matched.\n"
-        "4. Reply in the same language as the user's question without unnecessary filler."
+        "4. Reply in the same language as the user's question without unnecessary filler.\n"
+        "5. Use plain text without markdown formatting characters like *, **, or backticks."
     )
 
 
@@ -93,11 +94,10 @@ def synthesize_zero_key_response(
     pii_redactions: list[PIIRedactionEvent],
 ) -> str:
     profile = get_role_profile(role)
-    is_id = any(
-        w in sanitized_prompt.lower()
-        for w in (
-            "apa", "berapa", "bagaimana", "tolong", "cek", "daftar", "laporan", "kebijakan",
-            "buatkan", "tiket", "nasabah", "anomali", "klaster", "kontrak", "margin",
+    is_id = bool(
+        re.search(
+            r"\b(apa|berapa|bagaimana|tolong|cek|tampilkan|daftar|laporan|kebijakan|buatkan|nasabah|klaster|kontrak|batas|yang|untuk|menurut)\b",
+            sanitized_prompt.lower(),
         )
     )
 
@@ -106,24 +106,22 @@ def synthesize_zero_key_response(
     if pii_redactions:
         masked_desc = ", ".join(f"{e.pii_type} ({e.count}x)" for e in pii_redactions)
         sections.append(
-            f"> Data sensitif disamarkan otomatis sesuai UU PDP: {masked_desc}."
+            f"Data sensitif disamarkan otomatis sesuai UU PDP: {masked_desc}."
             if is_id
-            else f"> Sensitive data masked automatically (UU PDP): {masked_desc}."
+            else f"Sensitive data masked automatically (UU PDP): {masked_desc}."
         )
 
     # 1. Restricted by Role
     if rbac_blocked and not citations and sql_result is None:
-        doc_tags = ", ".join(f"`{b.doc_id}` ({b.clearance})" for b in blocked_citations)
+        doc_tags = ", ".join(f"{b.doc_id} ({b.clearance})" for b in blocked_citations)
         reason_detail = rbac_blocked_reason or (f"Requires access to {doc_tags}" if doc_tags else "Insufficient permissions.")
         if is_id:
             sections.append(
-                f"Akses ditolak untuk peran **{profile.label}**.\n"
-                f"- {reason_detail}"
+                f"Akses ditolak untuk peran {profile.label}. {reason_detail}"
             )
         else:
             sections.append(
-                f"Access denied for role **{profile.label}**.\n"
-                f"- {reason_detail}"
+                f"Access denied for role {profile.label}. {reason_detail}"
             )
         return "\n\n".join(sections)
 
@@ -133,9 +131,9 @@ def synthesize_zero_key_response(
             return "\n\n".join(
                 sections
                 + [
-                    "Input telah disanitasi `[POL-PDP-03]`. Silakan ajukan pertanyaan terkait operasional atau kebijakan internal."
+                    "Input telah disanitasi sesuai [POL-PDP-03]. Silakan ajukan pertanyaan terkait operasional atau kebijakan internal."
                     if is_id
-                    else "Input sanitized `[POL-PDP-03]`. Please ask a question related to internal operations or policy."
+                    else "Input sanitized per [POL-PDP-03]. Please ask a question related to internal operations or policy."
                 ]
             )
         return (
@@ -149,35 +147,35 @@ def synthesize_zero_key_response(
         top_row = sql_result.rows[0]
         if "cpu_pct" in top_row and float(top_row["cpu_pct"]) > 85:
             sections.append(
-                f"Node **`{top_row['node_id']}`** ({top_row['region']}) saat ini berstatus **{top_row['status']}** "
-                f"dengan utilisasi CPU **{top_row['cpu_pct']}%** dan latensi **{top_row['latency_ms']} ms**."
+                f"Node {top_row['node_id']} ({top_row['region']}) saat ini berstatus {top_row['status']} "
+                f"dengan utilisasi CPU {top_row['cpu_pct']}% dan latensi {top_row['latency_ms']} ms."
                 if is_id
-                else f"Node **`{top_row['node_id']}`** ({top_row['region']}) is currently **{top_row['status']}** "
-                f"at **{top_row['cpu_pct']}% CPU** and **{top_row['latency_ms']} ms** latency."
+                else f"Node {top_row['node_id']} ({top_row['region']}) is currently {top_row['status']} "
+                f"at {top_row['cpu_pct']}% CPU and {top_row['latency_ms']} ms latency."
             )
         elif "packet_loss_pct" in top_row:
             sections.append(
-                f"Regional **{top_row['region']}** mencatat *packet loss* CDR tertinggi sebesar **{top_row['packet_loss_pct']}%** "
-                f"(skor anomali **{top_row['anomaly_score']}**, status `{top_row['pipeline_status']}`)."
+                f"Regional {top_row['region']} mencatat packet loss CDR tertinggi sebesar {top_row['packet_loss_pct']}% "
+                f"(skor anomali {top_row['anomaly_score']}, status {top_row['pipeline_status']})."
                 if is_id
-                else f"**{top_row['region']}** currently has the highest CDR packet loss at **{top_row['packet_loss_pct']}%** "
-                f"(anomaly score **{top_row['anomaly_score']}**, status `{top_row['pipeline_status']}`)."
+                else f"{top_row['region']} currently has the highest CDR packet loss at {top_row['packet_loss_pct']}% "
+                f"(anomaly score {top_row['anomaly_score']}, status {top_row['pipeline_status']})."
             )
         elif "acv_billion_idr" in top_row:
             total_acv = round(sum(float(r["acv_billion_idr"]) for r in sql_result.rows), 2)
             total_pen = round(sum(float(r["sla_penalty_risk_billion_idr"]) for r in sql_result.rows), 2)
             sections.append(
-                f"Total nilai kontrak aktif tercatat **Rp {total_acv} Miliar** dengan eksposur risiko penalti SLA **Rp {total_pen} Miliar**."
+                f"Total nilai kontrak aktif tercatat Rp {total_acv} Miliar dengan eksposur risiko penalti SLA Rp {total_pen} Miliar."
                 if is_id
-                else f"Total active contract value is **IDR {total_acv} Billion**, with **IDR {total_pen} Billion** in SLA penalty exposure."
+                else f"Total active contract value is IDR {total_acv} Billion, with IDR {total_pen} Billion in SLA penalty exposure."
             )
         elif "risk_score" in top_row:
             sections.append(
-                f"Alert risiko tertinggi saat ini adalah **`{top_row['alert_id']}`** pada kanal **{top_row['channel']}** "
-                f"(skor risiko **{top_row['risk_score']}**, status `{top_row['status']}`)."
+                f"Alert risiko tertinggi saat ini adalah {top_row['alert_id']} pada kanal {top_row['channel']} "
+                f"(skor risiko {top_row['risk_score']}, status {top_row['status']})."
                 if is_id
-                else f"Top risk alert is **`{top_row['alert_id']}`** on **{top_row['channel']}** "
-                f"(risk score **{top_row['risk_score']}**, status `{top_row['status']}`)."
+                else f"Top risk alert is {top_row['alert_id']} on {top_row['channel']} "
+                f"(risk score {top_row['risk_score']}, status {top_row['status']})."
             )
 
     # 4. Concise RAG citations
@@ -186,15 +184,15 @@ def synthesize_zero_key_response(
         cite_blocks: list[str] = []
         for c in citations[:2]:
             best_points = _select_best_lines(c.snippet, q_tokens, max_lines=2)
-            cite_blocks.append(f"- **`[{c.doc_id}]` {c.section}:** {' '.join(best_points)}")
+            cite_blocks.append(f"[{c.doc_id}] {c.section}: {' '.join(best_points)}")
         sections.append("\n".join(cite_blocks))
 
     # 5. Ticket confirmation
     if ticket_created:
         sections.append(
-            f"Tiket **`{ticket_created.ticket_id}`** ({ticket_created.priority}) telah dibuat untuk `{ticket_created.target_node_or_region}`."
+            f"Tiket {ticket_created.ticket_id} ({ticket_created.priority}) telah dibuat untuk {ticket_created.target_node_or_region}."
             if is_id
-            else f"Created ticket **`{ticket_created.ticket_id}`** ({ticket_created.priority}) for `{ticket_created.target_node_or_region}`."
+            else f"Created ticket {ticket_created.ticket_id} ({ticket_created.priority}) for {ticket_created.target_node_or_region}."
         )
 
     return "\n\n".join(sections)
@@ -335,7 +333,7 @@ async def generate_enterprise_answer(
             ticket_created=ticket_created,
             pii_redactions=pii_redactions,
         )
-        return f"> `{provider}` unavailable ({type(exc).__name__}); using local engine.\n\n{fallback}", f"{provider}->local", "auditeer-grounded-v1"
+        return f"{provider} unavailable ({type(exc).__name__}); using local engine.\n\n{fallback}", f"{provider}->local", "auditeer-grounded-v1"
 
     fallback = synthesize_zero_key_response(
         sanitized_prompt=sanitized_prompt,
